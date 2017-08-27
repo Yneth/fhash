@@ -35,15 +35,28 @@ public class FileTree {
         return root.foldMap(seed, mapper, reduce);
     }
 
+    public <T> T foldMap(T seed, FileTreeMapper<T> mapper,
+                         FileTreeReducer<T> reducer, FileTreeReducer<T> dirReducer) {
+        return root.foldMap(seed, mapper, reducer, dirReducer);
+    }
+
     public static FileTree directory(File file) throws IOException {
-        return new FileTree(Node.createNode(file));
+        return directory(file.toPath());
+    }
+
+    public static FileTree directory(Path path) throws IOException {
+        return new FileTree(Node.createNode(path));
     }
 
     public static Option<FileTree> directoryOption(File file) throws IOException {
         if (!file.exists()) {
             return Option.none();
         }
-        return Option.of(new FileTree(Node.createNode(file)));
+        return Option.of(new FileTree(Node.createNode(file.toPath())));
+    }
+
+    public static Option<FileTree> directoryOption(Path path) throws IOException {
+        return directoryOption(path.toFile());
     }
 
     @Override
@@ -55,17 +68,21 @@ public class FileTree {
 
     public static class Node {
         @Getter
-        final File file;
+        final Path path;
 
-        Node(File file) {
-            this.file = file;
+        Node(Path path) {
+            this.path = path;
+        }
+
+        public File getFile() {
+            return path.toFile();
         }
 
         public List<Node> getNodes() {
             return List.empty();
         }
 
-        public List<File> getFiles() {
+        public List<Path> getFiles() {
             return List.empty();
         }
 
@@ -81,21 +98,26 @@ public class FileTree {
             return mapper.apply(this);
         }
 
-        static Node createNode(File file) throws IOException {
+        <T> T foldMap(T seed, FileTreeMapper<T> mapper,
+                      FileTreeReducer<T> reducer, FileTreeReducer<T> dirReducer) {
+            return mapper.apply(this);
+        }
+
+        static Node createNode(Path path) throws IOException {
+            final File file = path.toFile();
             if (file.isDirectory()) {
-                final List<Node> nodes = Files.list(file.toPath())
-                        .map(Path::toFile)
+                final List<Node> nodes = Files.list(path)
                         .map(unchecked(Node::createNode))
                         .collect(List.collector());
-                return new DirectoryNode(file, nodes);
+                return new DirectoryNode(path, nodes);
             }
-            return new Node(file);
+            return new Node(path);
         }
 
         @Override
         public String toString() {
             return "Node{" +
-                    "file=" + file +
+                    "path=" + path +
                     '}';
         }
     }
@@ -103,7 +125,7 @@ public class FileTree {
     private static class DirectoryNode extends Node {
         final List<Node> nodes;
 
-        DirectoryNode(File file, List<Node> nodes) {
+        DirectoryNode(Path file, List<Node> nodes) {
             super(file);
             this.nodes = nodes;
         }
@@ -114,8 +136,8 @@ public class FileTree {
         }
 
         @Override
-        public List<File> getFiles() {
-            return nodes.map(Node::getFile);
+        public List<Path> getFiles() {
+            return nodes.map(Node::getPath);
         }
 
         @Override
@@ -130,16 +152,25 @@ public class FileTree {
 
         @Override
         <T> T foldMap(T seed, FileTreeMapper<T> mapper, FileTreeReducer<T> reducer) {
-            T foldedChild = getNodes()
+            final T foldedChild = getNodes()
                     .map(node -> node.foldMap(seed, mapper, reducer))
                     .fold(seed, reducer);
             return reducer.apply(mapper.apply(this), foldedChild);
         }
 
         @Override
+        <T> T foldMap(T seed, FileTreeMapper<T> mapper,
+                      FileTreeReducer<T> reducer, FileTreeReducer<T> dirReducer) {
+            final T foldedChild = getNodes()
+                    .map(node -> node.foldMap(seed, mapper, reducer))
+                    .fold(seed, reducer);
+            return dirReducer.apply(mapper.apply(this), foldedChild);
+        }
+
+        @Override
         public String toString() {
             return "DirectoryNode{" +
-                    "file=" + file +
+                    "path=" + path +
                     ", nodes=" + nodes +
                     '}';
         }

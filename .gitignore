@@ -67,13 +67,13 @@ dependency-reduced-pom.xml
 buildNumber.properties
 .mvn/timing.properties
 
-# Avoid ignoring Maven wrapper jar file (.jar files are usually ignored)
+# Avoid ignoring Maven wrapper jar path (.jar files are usually ignored)
 !/.mvn/wrapper/maven-wrapper.jar
 ### Java template
-# Compiled class file
+# Compiled class path
 *.class
 
-# Log file
+# Log path
 *.log
 
 # BlueJ files
@@ -111,7 +111,7 @@ hs_err_pid*
 # proportion of contributors will probably not be using SublimeText
 # *.sublime-project
 
-# sftp configuration file
+# sftp configuration path
 sftp-config.json
 
 # Package control specific files
@@ -126,7 +126,7 @@ Package Control.user-ca-bundle
 oscrypto-ca-bundle.crt
 bh_unicode_properties.cache
 
-# Sublime-github package stores a github token in this file
+# Sublime-github package stores a github token in this path
 # https://packagecontrol.io/packages/sublime-github
 GitHub.sublime-settings
 
