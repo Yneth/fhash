@@ -12,6 +12,7 @@ import java.security.NoSuchAlgorithmException;
 import java.util.concurrent.CompletableFuture;
 import java.util.function.Supplier;
 
+import io.vavr.Function1;
 import io.vavr.control.Try;
 import ua.fhash.ftree.FileTree;
 import ua.fhash.ftree.FileTreeMapper;
@@ -30,9 +31,10 @@ public class FhashApplication {
         final Path rootPath = Paths.get(folder);
 
         Supplier<MessageDigest> digestFactory = unchecked(() -> createMessageDigest(algorithm));
+        Function1<File, MessageDigest> digestService = unchecked(file -> digest(bufferSize, digestFactory, file));
 
         Try.of(() -> FileTree.directory(rootPath.toFile()))
-                .mapTry(tree -> tree.foldMap(seed(digestFactory), mapper(bufferSize, digestFactory), reducer()))
+                .mapTry(tree -> tree.foldMap(seed(digestFactory), mapper(digestService), reducer()))
                 .andThenTry(future -> System.out.println(future.get()))
                 .onFailure(Throwable::printStackTrace)
                 .andFinally(() -> System.out.println(System.currentTimeMillis() - startTime));
@@ -50,10 +52,8 @@ public class FhashApplication {
     }
 
     private static FileTreeMapper<CompletableFuture<MessageDigest>> mapper(
-            int bufferSize, Supplier<MessageDigest> factory) {
-        return node -> CompletableFuture.supplyAsync(
-                unchecked(() -> digest(bufferSize, factory, node.getFile()))
-        );
+            Function1<File, MessageDigest> digestService) {
+        return node -> CompletableFuture.supplyAsync(() -> digestService.apply(node.getFile()));
     }
 
     private static MessageDigest createMessageDigest(String algorithm)
