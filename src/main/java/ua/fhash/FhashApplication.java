@@ -49,11 +49,13 @@ public class FhashApplication {
         return node -> CompletableFuture.supplyAsync(unchecked(() -> digest(node.getFile())));
     }
 
-    private static MessageDigest createMessageDigest() throws NoSuchAlgorithmException {
+    private static MessageDigest createMessageDigest()
+            throws NoSuchAlgorithmException {
         return MessageDigest.getInstance("SHA-256");
     }
 
-    private static MessageDigest digest(File file) throws IOException, NoSuchAlgorithmException {
+    private static MessageDigest digest(File file)
+            throws IOException, NoSuchAlgorithmException {
         final int bufferSize = 8096;
         MessageDigest instance = createMessageDigest();
         if (file.isDirectory()) {

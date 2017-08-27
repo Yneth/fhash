@@ -80,7 +80,7 @@ public class FileTree {
         }
     }
 
-    public static class DirectoryNode extends Node {
+    private static class DirectoryNode extends Node {
         final List<Node> nodes;
 
         DirectoryNode(File file, List<Node> nodes) {
