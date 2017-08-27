@@ -6,6 +6,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 
 import io.vavr.collection.List;
+import io.vavr.control.Option;
 import lombok.Getter;
 
 import static io.vavr.API.unchecked;
@@ -18,12 +19,31 @@ public class FileTree {
         this.root = root;
     }
 
+    public int count() {
+        return root.foldMap(0, file -> 1, Integer::sum);
+    }
+
+    public int countFiles() {
+        return root.foldMap(0, file -> file.isFile() ? 1 : 0, Integer::sum);
+    }
+
+    public int countDirectories() {
+        return root.foldMap(0, file -> file.isDirectory() ? 1 : 0, Integer::sum);
+    }
+
     public <T> T foldMap(T seed, FileTreeMapper<T> mapper, FileTreeReducer<T> reduce) {
         return root.foldMap(seed, mapper, reduce);
     }
 
     public static FileTree directory(File file) throws IOException {
         return new FileTree(Node.createNode(file));
+    }
+
+    public static Option<FileTree> directoryOption(File file) throws IOException {
+        if (!file.exists()) {
+            return Option.none();
+        }
+        return Option.of(new FileTree(Node.createNode(file)));
     }
 
     @Override
