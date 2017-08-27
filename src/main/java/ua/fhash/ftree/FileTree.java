@@ -4,10 +4,7 @@ import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.function.BiFunction;
-import java.util.function.Function;
 
-import io.vavr.Function1;
 import io.vavr.collection.List;
 import lombok.Getter;
 
@@ -21,20 +18,12 @@ public class FileTree {
         this.root = root;
     }
 
-    public List<Node> currentFolder() {
-        return root.getNodes();
-    }
-
-    public <T> T mapReduce(Function<Node, T> mapper, BiFunction<T, T, T> reducer) {
-        return root.mapReduce(mapper, reducer);
-    }
-
-    public <T> T foldMap(T seed, Function1<Node, T> map, BiFunction<T, T, T> reduce) {
+    public <T> T foldMap(T seed, FileTreeMapper<T> map, FileTreeReducer<T> reduce) {
         return root.foldMap(seed, map, reduce);
     }
 
     public static FileTree directory(File file) throws IOException {
-        return new FileTree(createNode(file));
+        return new FileTree(Node.createNode(file));
     }
 
     @Override
@@ -42,17 +31,6 @@ public class FileTree {
         return "FileTree{" +
                 "root=" + root +
                 '}';
-    }
-
-    private static Node createNode(File file) throws IOException {
-        if (file.isDirectory()) {
-            final List<Node> nodes = Files.list(file.toPath())
-                    .map(Path::toFile)
-                    .map(unchecked(FileTree::createNode))
-                    .collect(List.collector());
-            return new DirectoryNode(file, nodes);
-        }
-        return new Node(file);
     }
 
     public static class Node {
@@ -79,12 +57,19 @@ public class FileTree {
             return false;
         }
 
-        public <T> T mapReduce(Function<Node, T> mapper, BiFunction<T, T, T> reducer) {
+        <T> T foldMap(T seed, FileTreeMapper<T> mapper, FileTreeReducer<T> reducer) {
             return mapper.apply(this);
         }
 
-        <T> T foldMap(T seed, Function1<Node, T> map, BiFunction<T, T, T> reduce) {
-            return this.mapReduce(map, reduce);
+        static Node createNode(File file) throws IOException {
+            if (file.isDirectory()) {
+                final List<Node> nodes = Files.list(file.toPath())
+                        .map(Path::toFile)
+                        .map(unchecked(Node::createNode))
+                        .collect(List.collector());
+                return new DirectoryNode(file, nodes);
+            }
+            return new Node(file);
         }
 
         @Override
@@ -103,31 +88,32 @@ public class FileTree {
             this.nodes = nodes;
         }
 
+        @Override
         public List<Node> getNodes() {
             return nodes;
         }
 
+        @Override
         public List<File> getFiles() {
             return nodes.map(Node::getFile);
         }
 
+        @Override
         public boolean isFile() {
             return false;
         }
 
+        @Override
         public boolean isDirectory() {
             return true;
         }
 
-        public <T> T mapReduce(Function<Node, T> mapper, BiFunction<T, T, T> reducer) {
-            T reducedChild = getNodes()
-                    .map(node -> node.mapReduce(mapper, reducer))
-                    .reduce(reducer);
-            return reducer.apply(mapper.apply(this), reducedChild);
-        }
-
-        <T> T foldMap(T seed, Function1<Node, T> map, BiFunction<T, T, T> reduce) {
-            return reduce.apply(seed, this.mapReduce(map, reduce));
+        @Override
+        <T> T foldMap(T seed, FileTreeMapper<T> mapper, FileTreeReducer<T> reducer) {
+            T foldedChild = getNodes()
+                    .map(node -> node.foldMap(seed, mapper, reducer))
+                    .fold(seed, reducer);
+            return reducer.apply(mapper.apply(this), foldedChild);
         }
 
         @Override
