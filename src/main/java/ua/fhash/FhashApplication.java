@@ -32,7 +32,7 @@ public class FhashApplication {
         Supplier<MessageDigest> digestFactory = unchecked(() -> createMessageDigest(algorithm));
 
         Try.of(() -> FileTree.directory(rootPath.toFile()))
-                .mapTry(tree -> tree.foldMap(seed(digestFactory), nodeMapper(bufferSize, digestFactory), reducer()))
+                .mapTry(tree -> tree.foldMap(seed(digestFactory), mapper(bufferSize, digestFactory), reducer()))
                 .andThenTry(future -> System.out.println(future.get()))
                 .onFailure(Throwable::printStackTrace)
                 .andFinally(() -> System.out.println(System.currentTimeMillis() - startTime));
@@ -49,7 +49,7 @@ public class FhashApplication {
         }));
     }
 
-    private static FileTreeMapper<CompletableFuture<MessageDigest>> nodeMapper(
+    private static FileTreeMapper<CompletableFuture<MessageDigest>> mapper(
             int bufferSize, Supplier<MessageDigest> factory) {
         return node -> CompletableFuture.supplyAsync(
                 unchecked(() -> digest(bufferSize, factory, node.getFile()))

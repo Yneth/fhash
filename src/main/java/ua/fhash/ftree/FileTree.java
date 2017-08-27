@@ -12,14 +12,14 @@ import static io.vavr.API.unchecked;
 
 public class FileTree {
 
-    private Node root;
+    private final Node root;
 
     private FileTree(Node root) {
         this.root = root;
     }
 
-    public <T> T foldMap(T seed, FileTreeMapper<T> map, FileTreeReducer<T> reduce) {
-        return root.foldMap(seed, map, reduce);
+    public <T> T foldMap(T seed, FileTreeMapper<T> mapper, FileTreeReducer<T> reduce) {
+        return root.foldMap(seed, mapper, reduce);
     }
 
     public static FileTree directory(File file) throws IOException {
