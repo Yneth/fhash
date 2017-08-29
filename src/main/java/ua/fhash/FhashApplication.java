@@ -5,87 +5,94 @@ import java.io.FileInputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.function.Function;
 import java.util.function.Supplier;
 
-import io.vavr.Function1;
+import io.vavr.Tuple2;
 import io.vavr.collection.HashMap;
 import io.vavr.collection.Map;
 import io.vavr.control.Try;
 import lombok.extern.slf4j.Slf4j;
-import ua.fhash.ftree.FileTree;
-import ua.fhash.ftree.FileTreeMapper;
-import ua.fhash.ftree.FileTreeReducer;
+import ua.fhash.fwalk.PathMapper;
+import ua.fhash.fwalk.Reducer;
 
 import static io.vavr.API.unchecked;
 
 @Slf4j
 public class FhashApplication {
 
-    public static void main(String[] args) throws NoSuchAlgorithmException {
+    private static final ExecutorService THREAD_POOL = Executors.newFixedThreadPool(8);
+
+    public static void main(String[] args) {
         final long startTime = System.currentTimeMillis();
 
         final int bufferSize = 8096;
         final String algorithm = "SHA-256";
-        final String folder = "C:/Users/antonnn/Desktop";
+        final String folder = "C:/Users/Anton_Bondarenko/Desktop/test/ctco-fpos";
+//        final String folder = "C:/Users/Anton_Bondarenko/Desktop/cmder";
         final Path rootPath = Paths.get(folder);
 
         Supplier<MessageDigest> digestFactory = unchecked(() -> createMessageDigest(algorithm));
-        Function1<File, MessageDigest> digestService = unchecked(file -> digest(bufferSize, digestFactory, file));
+        Function<File, MessageDigest> digestService = unchecked(file -> digest(bufferSize, digestFactory, file));
 
-        Try.of(() -> FileTree.directoryOption(rootPath.toFile())
-                .getOrElseThrow(RuntimeException::new)
-        )
-                .mapTry(tree -> tree.foldMap(seed1(), mapper1(digestService), reducer1(), dirReducer1()))
-                .andThenTry(future -> System.out.println(future.get().mapValues(MessageDigest::digest)))
-//                .andThenTry(future -> System.out.println(Arrays.toString(future.get().digest())))
+        Try.of(() -> walk(rootPath, seed(), mapper(digestService), reducer(), dirReducer()))
+                .andThenTry(future -> System.out.println(future.get()))
                 .onFailure(Throwable::printStackTrace)
-                .andFinally(() -> System.out.println(System.currentTimeMillis() - startTime));
+                .andFinally(() -> System.out.println((System.currentTimeMillis() - startTime) / 1000.0))
+                .andFinally(THREAD_POOL::shutdown);
     }
 
-    private static CompletableFuture<Map<Path, MessageDigest>> seed1() {
+    private static <T> T walk(Path path, T seed, PathMapper<T> mapper,
+                              Reducer<T> reducer, Reducer<T> dirReducer)
+            throws IOException {
+        final File file = path.toFile();
+        if (file.isDirectory()) {
+            final T foldedChild = Files.list(path)
+                    .sorted(Path::compareTo)
+                    .map(unchecked(p -> walk(p, seed, mapper, reducer, dirReducer)))
+                    .reduce(seed, reducer::apply);
+            return dirReducer.apply(mapper.apply(path), foldedChild);
+        }
+        return mapper.apply(path);
+    }
+
+    private static <T> CompletableFuture<T> supplyAsync(Supplier<T> supplier) {
+        return CompletableFuture.supplyAsync(supplier, THREAD_POOL);
+    }
+
+    private static CompletableFuture<Map<Path, MessageDigest>> seed() {
         return CompletableFuture.completedFuture(HashMap.empty());
     }
 
-    private static FileTreeMapper<CompletableFuture<Map<Path, MessageDigest>>> mapper1(
-            Function1<File, MessageDigest> digestService) {
-        return node -> CompletableFuture.supplyAsync(() ->
-                HashMap.of(node.getPath(), digestService.apply(node.getFile())));
+    private static PathMapper<CompletableFuture<Map<Path, MessageDigest>>> mapper(
+            Function<File, MessageDigest> digestService) {
+        return path -> supplyAsync(() -> HashMap.of(path, digestService.apply(path.toFile())));
     }
 
-    private static FileTreeReducer<CompletableFuture<Map<Path, MessageDigest>>> reducer1() {
+    private static Reducer<CompletableFuture<Map<Path, MessageDigest>>> reducer() {
         return (f1, f2) -> f1.thenCompose(n1 -> f2.thenApply(n1::merge));
     }
 
-    private static FileTreeReducer<CompletableFuture<Map<Path, MessageDigest>>> dirReducer1() {
+    private static Reducer<CompletableFuture<Map<Path, MessageDigest>>> dirReducer() {
         return (f1, f2) -> f1.thenCompose(n1 -> f2.thenApply(n2 -> {
-            final FileTreeReducer<MessageDigest> reducer = (d1, d2) -> {
-                d1.update(d2.digest());
-                return d1;
-            };
-            final MessageDigest fileHashes = n2.values().reduce(reducer);
-            return n1.mapValues(d -> reducer.apply(d, fileHashes)).merge(n2);
+            final Tuple2<Path, MessageDigest> dir = n1.head();
+            final MessageDigest dirHash = n2.values()
+                    .fold(dir._2, FhashApplication::combineDigest);
+            return n1.put(dir._1, dirHash).merge(n2);
         }));
     }
 
-    private static CompletableFuture<MessageDigest> seed(Supplier<MessageDigest> factory) {
-        return CompletableFuture.completedFuture(factory.get());
-    }
-
-    private static FileTreeReducer<CompletableFuture<MessageDigest>> reducer() {
-        return (f1, f2) -> f1.thenCompose(n1 -> f2.thenApply(n2 -> {
-            n1.update(n2.digest());
-            return n1;
-        }));
-    }
-
-    private static FileTreeMapper<CompletableFuture<MessageDigest>> mapper(
-            Function1<File, MessageDigest> digestService) {
-        return node -> CompletableFuture.supplyAsync(() -> digestService.apply(node.getFile()));
+    private static MessageDigest combineDigest(MessageDigest m1, MessageDigest m2) {
+        m1.update(m2.digest());
+        return m1;
     }
 
     private static MessageDigest createMessageDigest(String algorithm)
