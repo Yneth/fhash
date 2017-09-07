@@ -260,10 +260,10 @@ class ThreadTest {
         List<Runnable> intensive = Stream.generate(() -> intensiveTask).limit(10).collect(Collectors.toList());
         List<Runnable> easy = Stream.generate(() -> easyTask).limit(10).collect(Collectors.toList());
 
-        pool.submit(new SeqHierarchicalTask("e1", 1, easy));
-        pool.submit(new SeqHierarchicalTask("e0", 1, easy));
-        pool.submit(new SeqHierarchicalTask("i0", 4, intensive));
-        pool.submit(new SeqHierarchicalTask("i1", 4, intensive));
+        pool.submit(SeqHierarchicalTask.create("e1", 1, easy));
+        pool.submit(SeqHierarchicalTask.create("e0", 1, easy));
+        pool.submit(SeqHierarchicalTask.create("i0", 4, intensive));
+        pool.submit(SeqHierarchicalTask.create("i1", 4, intensive));
 
         pool.shutdown();
         pool.awaitTermination(10, TimeUnit.MINUTES);
