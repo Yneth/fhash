@@ -1,5 +1,3 @@
-package ua.fhash;
-
 import java.util.List;
 import java.util.concurrent.RecursiveTask;
 
