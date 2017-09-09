@@ -9,8 +9,10 @@ import java.util.concurrent.ForkJoinPool;
 import java.util.concurrent.ForkJoinTask;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.IntConsumer;
+import java.util.function.Supplier;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 import java.util.stream.Stream;
@@ -165,6 +167,48 @@ class ThreadTest {
         future.cancel(true);
         log.debug("------------CANCEL------------");
 
+        pool.shutdown();
+        log.debug("------------SHUTDOWN------------");
+
+        pool.awaitTermination(60, TimeUnit.MINUTES);
+        log.debug("------------POOL TERMINATION------------");
+    }
+
+    @Test
+    void testPredicateStop() throws Exception {
+         // GIVEN
+        ExecutorService pool = Executors.newFixedThreadPool(1);
+        ForkJoinPool forkJoinPool = new ForkJoinPool();
+
+        AtomicBoolean interrupted = new AtomicBoolean();
+        Supplier<Boolean> shouldStop = interrupted::get;
+
+        Runnable task = wait(10, TimeUnit.SECONDS, () -> {
+            Boolean val = shouldStop.get();
+            log.debug("Interrupted {}", val);
+            if (val) {
+                throw new RuntimeException();
+            }
+        });
+
+        Future<?> future = pool.submit(() -> {
+            ForkJoinTask<?> submit = forkJoinPool.submit(() ->
+                    IntStream.range(0, 10).parallel().forEach(v -> task.run()));
+            try {
+                submit.get();
+                fail("Should throw interrupted exception");
+            } catch (Exception e) {
+                while (!interrupted.compareAndSet(false, true)) {
+                }
+            }
+            log.debug("------------FINISHED------------");
+        });
+
+        Thread.sleep(2_000);
+        future.cancel(true);
+        log.debug("------------CANCEL------------");
+
+        Thread.sleep(2_000);
         pool.shutdown();
         log.debug("------------SHUTDOWN------------");
 
