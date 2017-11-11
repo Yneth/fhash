@@ -36,17 +36,18 @@ public class FhashApplication {
 
         final int bufferSize = 8096;
         final String algorithm = "SHA-256";
-        final String folder = "C:/Users/Anton_Bondarenko/Desktop/test/ctco-fpos";
-//        final String folder = "C:/Users/Anton_Bondarenko/Desktop/cmder";
+        final String folder = "E:\\wspc\\fhash";
         final Path rootPath = Paths.get(folder);
 
         Supplier<MessageDigest> digestFactory = unchecked(() -> createMessageDigest(algorithm));
         Function<File, MessageDigest> digestService = unchecked(file -> digest(bufferSize, digestFactory, file));
 
         Try.of(() -> walk(rootPath, seed(), mapper(digestService), reducer(), dirReducer()))
-                .andThenTry(future -> System.out.println(future.get()))
+                .mapTry(CompletableFuture::get)
+                .map(map -> map.mapValues(MessageDigest::digest))
+                .andThen(map -> log.debug(map.toString()))
                 .onFailure(Throwable::printStackTrace)
-                .andFinally(() -> System.out.println((System.currentTimeMillis() - startTime) / 1000.0))
+                .andFinally(() -> log.debug(Double.toString((System.currentTimeMillis() - startTime) / 1000.0)))
                 .andFinally(THREAD_POOL::shutdown);
     }
 
